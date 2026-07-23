@@ -1,1 +1,219 @@
+-- Tower of Hell Auto Teleport to Next Level
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local RunService = game:GetService("RunService")
 
+local teleportEnabled = false
+local currentLevel = 0
+local totalLevels = 0
+
+local function getCurrentLevel()
+    local tower = workspace:FindFirstChild("Tower")
+    if not tower then return 0 end
+    
+    local highest = 0
+    for _, child in ipairs(tower:GetChildren()) do
+        if child:IsA("Model") and child.Name:match("Level") then
+            local num = tonumber(child.Name:match("%d+"))
+            if num and num > highest then
+                highest = num
+            end
+        end
+    end
+    return highest
+end
+
+local function getNextLevelPlatform()
+    local tower = workspace:FindFirstChild("Tower")
+    if not tower then return nil end
+    
+    local nextLevelNum = currentLevel + 1
+    local levelName = "Level" .. nextLevelNum
+    
+    for _, child in ipairs(tower:GetChildren()) do
+        if child:IsA("Model") and child.Name == levelName then
+            for _, part in ipairs(child:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name == "Platform" then
+                    return part
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function teleportToLevel()
+    local target = getNextLevelPlatform()
+    if not target then
+        print("Не найден уровень " .. (currentLevel + 1))
+        return
+    end
+    
+    local pos = target.Position + Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.new(pos)
+    currentLevel = currentLevel + 1
+    print("Телепорт на уровень:", currentLevel)
+end
+
+local function checkCurrentLevel()
+    local tower = workspace:FindFirstChild("Tower")
+    if not tower then return end
+    
+    for _, child in ipairs(tower:GetChildren()) do
+        if child:IsA("Model") and child.Name:match("Level") then
+            local num = tonumber(child.Name:match("%d+"))
+            if num and num > currentLevel then
+                -- Проверяем, находится ли игрок на этой платформе
+                for _, part in ipairs(child:GetDescendants()) do
+                    if part:IsA("BasePart") and part.Name == "Platform" then
+                        local dist = (hrp.Position - part.Position).Magnitude
+                        if dist < 20 then
+                            currentLevel = num
+                            print("На уровне:", currentLevel)
+                            -- Телепортируем на следующий
+                            task.wait(0.5)
+                            teleportToLevel()
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TOHTeleport"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 80)
+frame.Position = UDim2.new(0.5, -100, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+frame.BackgroundTransparency = 0.1
+frame.BorderSizePixel = 1
+frame.BorderColor3 = Color3.fromRGB(60, 200, 255)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 25)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.Text = "TOH TELEPORT"
+title.TextColor3 = Color3.fromRGB(100, 200, 255)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextXAlignment = Enum.TextXAlignment.Center
+title.Parent = frame
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, 0, 0, 20)
+status.Position = UDim2.new(0, 0, 0, 25)
+status.Text = "Статус: Выкл"
+status.TextColor3 = Color3.fromRGB(200, 200, 200)
+status.BackgroundTransparency = 1
+status.Font = Enum.Font.GothamMedium
+status.TextSize = 13
+status.TextXAlignment = Enum.TextXAlignment.Center
+status.Parent = frame
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0.4, 0, 0.3, 0)
+toggleBtn.Position = UDim2.new(0.3, 0, 0.55, 0)
+toggleBtn.Text = "ВКЛ"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 120, 60)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 14
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = frame
+
+toggleBtn.MouseButton1Click:Connect(function()
+    teleportEnabled = not teleportEnabled
+    if teleportEnabled then
+        toggleBtn.Text = "ВЫКЛ"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(120, 30, 30)
+        status.Text = "Статус: Активен"
+        status.TextColor3 = Color3.fromRGB(100, 255, 100)
+        
+        totalLevels = getCurrentLevel()
+        currentLevel = 0
+        print("Всего уровней:", totalLevels)
+        print("Авто-телепорт включён")
+        
+        spawn(function()
+            while teleportEnabled do
+                pcall(function()
+                    checkCurrentLevel()
+                    -- Если не на платформе, пробуем телепорт на ближайший доступный уровень
+                    local nextPlatform = getNextLevelPlatform()
+                    if not nextPlatform then
+                        -- Если нет следующего уровня, пытаемся найти любой доступный
+                        local tower = workspace:FindFirstChild("Tower")
+                        if tower then
+                            for _, child in ipairs(tower:GetChildren()) do
+                                if child:IsA("Model") and child.Name:match("Level") then
+                                    local num = tonumber(child.Name:match("%d+"))
+                                    if num and num > currentLevel then
+                                        for _, part in ipairs(child:GetDescendants()) do
+                                            if part:IsA("BasePart") and part.Name == "Platform" then
+                                                local dist = (hrp.Position - part.Position).Magnitude
+                                                if dist > 30 then
+                                                    hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, 5, 0))
+                                                    currentLevel = num
+                                                    print("Телепорт на уровень:", currentLevel)
+                                                end
+                                                break
+                                            end
+                                        end
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+                task.wait(1)
+            end
+        end)
+    else
+        toggleBtn.Text = "ВКЛ"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 120, 60)
+        status.Text = "Статус: Выкл"
+        status.TextColor3 = Color3.fromRGB(200, 200, 200)
+        print("Авто-телепорт выключён")
+    end
+end)
+
+-- Кнопка телепорта вручную
+local manualBtn = Instance.new("TextButton")
+manualBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
+manualBtn.Position = UDim2.new(0.1, 0, 0.78, 0)
+manualBtn.Text = "Телепорт на след. уровень"
+manualBtn.BackgroundColor3 = Color3.fromRGB(30, 60, 120)
+manualBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualBtn.Font = Enum.Font.GothamBold
+manualBtn.TextSize = 12
+manualBtn.BorderSizePixel = 0
+manualBtn.Parent = frame
+
+manualBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        local nextPlatform = getNextLevelPlatform()
+        if nextPlatform then
+            hrp.CFrame = CFrame.new(nextPlatform.Position + Vector3.new(0, 5, 0))
+            currentLevel = currentLevel + 1
+            print("Ручной телепорт на уровень:", currentLevel)
+        else
+            print("Следующий уровень не найден")
+        end
+    end)
+end)
+
+print("Tower of Hell Auto Teleport загружен!")
+print("by: vm3x")
